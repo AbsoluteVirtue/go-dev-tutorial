@@ -53,3 +53,6 @@ Once you've updated the shell path, run the go install command to compile and in
         https://go.dev/blog/declaration-syntax
         https://go.dev/blog/slices-intro
         https://go.dev/blog/defer-panic-and-recover
+        https://go.dev/doc/code
+        https://go.dev/doc/articles/wiki/
+        https://go.dev/doc/effective_go
