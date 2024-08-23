@@ -1,5 +1,13 @@
 # go-dev-tutorial
-Taken from https://gobyexample.com/
+## installation
+https://go.dev/doc/install
+
+        rm -rf /usr/local/go && tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
+Do not untar the archive into an existing /usr/local/go tree. This is known to produce broken Go installations.
+
+Add /usr/local/go/bin to the PATH environment variable by adding the following line to your $HOME/.profile or /etc/profile (for a system-wide installation):
+        
+        export PATH=$PATH:/usr/local/go/bin
 
 ## basics
 https://go.dev/doc/tutorial/getting-started
@@ -50,6 +58,8 @@ Once you've updated the shell path, run the go install command to compile and in
         go install
 
 ## links
+ 
+        https://gobyexample.com/
         https://go.dev/blog/declaration-syntax
         https://go.dev/blog/slices-intro
         https://go.dev/blog/defer-panic-and-recover
