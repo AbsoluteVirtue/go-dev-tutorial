@@ -33,6 +33,37 @@ type Vertex struct {
 	Y int
 }
 
+type MyFloat float64
+
+type IAbs interface {
+	abs() float64
+}
+
+type I interface {
+	M()
+}
+
+type T struct {
+	S string
+}
+
+// This method means type T implements the interface I,
+// but we don't need to explicitly declare that it does so.
+func (t T) M() {
+	fmt.Println(t.S)
+}
+
+// Error interface
+type MyError struct {
+	When time.Time
+	What string
+}
+
+func (e *MyError) Error() string {
+	return fmt.Sprintf("at %v, %s",
+		e.When, e.What)
+}
+
 func main() {
 	fmt.Println("Hello, 世界")
 
@@ -120,7 +151,7 @@ func main() {
 	// This construct can be a clean way to write long if-then-else chains.
 
 	// A defer statement defers the execution of a function until the surrounding function returns.
-	defer fmt.Println("The end")
+	defer fmt.Println("world!")
 	// The deferred call's arguments are evaluated immediately. Deferred function calls are pushed onto a stack.
 
 	fmt.Println(Vertex{1, 2})
@@ -175,6 +206,68 @@ func main() {
 		"Google":    {37, -122},
 	}
 	fmt.Println(m)
+
+	hypot := func(x, y float64) float64 {
+		return math.Sqrt(x*x + y*y)
+	}
+	fmt.Println(hypot(5, 12))
+	fmt.Println(compute(math.Pow))
+
+	fa := MyFloat(-math.Sqrt2)
+	fmt.Println(fa.abs())
+
+	// interface implementing abs
+	var ia IAbs
+	fia := MyFloat(-math.Sqrt2)
+	via := Vertex{3, 4}
+
+	ia = fia
+	fmt.Println(ia.abs())
+	ia = &via
+	fmt.Println(ia.abs())
+
+	var ii I = T{"Hello,"}
+	defer ii.M()
+	fmt.Printf("(%v, %T)\n", ii, ii)
+
+	// Empty interfaces
+	var ei interface{}
+	fmt.Printf("(%v, %T)\n", ei, ei)
+
+	ei = 42
+	fmt.Printf("(%v, %T)\n", ei, ei)
+
+	// Type assertions
+	var ais interface{} = "hello"
+
+	bis := ais.(string)
+	fmt.Println(bis)
+
+	_, bisp := ais.(string)
+	fmt.Println(bisp)
+
+	cis, isok := ais.(float64)
+	fmt.Println(cis, isok)
+
+	do(42)
+	do(false)
+
+}
+
+func do(i interface{}) {
+	switch v := i.(type) {
+	case int:
+		fmt.Printf("Twice %v is %v\n", v, v*2)
+	case string:
+		fmt.Printf("%q is %v bytes long\n", v, len(v))
+	default:
+		fmt.Printf("I don't know about type %T!\n", v)
+	}
+}
+
+// Stringer is a type that can describe itself as a string
+func (p Vertex) String() string {
+	return fmt.Sprintf("%v (%v years)", p.X, p.Y)
 }
 
 // https://go.dev/blog/declaration-syntax
@@ -238,6 +331,50 @@ func sqrt(x float64) (z float64) {
 }
 
 // Exercise: https://go.dev/tour/moretypes/23
-func WordCount(s string) map[string]int {
-	return map[string]int{"x": 1}
+func WordCount(s string) (m map[string]int) {
+	a := strings.Fields(s)
+	m = make(map[string]int)
+	for _, v := range a {
+		m[v] += 1
+	}
+	return
+}
+
+func compute(fn func(float64, float64) float64) float64 {
+	return fn(3, 4)
+}
+
+// adder function returns a closure.
+// Each closure is bound to its own sum variable.
+func adder() func(int) int {
+	sum := 0
+	return func(x int) int {
+		sum += x
+		return sum
+	}
+}
+
+// Exercise: https://go.dev/tour/moretypes/26
+func fibonacci() func() int {
+	var a = 0
+	var b = 1
+	return func() (c int) {
+		c = a + b
+		a = b
+		b = c
+		return
+	}
+}
+
+// Method example for Vertex struct
+func (v Vertex) abs() float64 {
+	return math.Sqrt(float64(v.X*v.X + v.Y*v.Y))
+}
+
+// Methods can be overloaded
+func (f MyFloat) abs() float64 {
+	if f < 0 {
+		return float64(-f)
+	}
+	return float64(f)
 }
