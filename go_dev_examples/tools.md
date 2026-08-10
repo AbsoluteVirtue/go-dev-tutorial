@@ -554,3 +554,14 @@ func TestServer(t *testing.T) {
 ```
 ## Extra
 github.com/nf/webfront
+
+## Go offline
+https://go.dev/tour/welcome/3
+
+This tour is also available as a stand-alone program that you can use without access to the internet. It builds and runs the code samples on your own machine.
+
+To run the tour locally, you'll need to first install Go and then run:
+``` bash
+$ go install golang.org/x/website/tour@latest
+```
+This will place a tour binary in your GOPATH's bin directory. When you run the tour program, it will open a web browser displaying your local version of the tour.
