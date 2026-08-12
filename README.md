@@ -8,7 +8,6 @@ Do not untar the archive into an existing /usr/local/go tree. This is known to p
 Add /usr/local/go/bin to the PATH environment variable by adding the following line to your $HOME/.profile or /etc/profile (for a system-wide installation):
         
 	export PATH=$PATH:/usr/local/go/bin
-
 ## basics
 https://go.dev/doc/tutorial/getting-started
 
@@ -21,7 +20,6 @@ Run your code to see the greeting:
 Use the following command to get a list of the others:
 
 	go help
-
 ## packages
 Visit https://pkg.go.dev and search for a package.
 
@@ -33,14 +31,12 @@ Publish the example.com/greetings module from its repository (with a module path
 To do that, use the go mod edit command to edit the example.com/hello module to redirect Go tools from its module path (where the module isn't) to the local directory (where it is):
 
 	go mod edit -replace example.com/greetings=../greetings
-
 ## tests
 At the command line in the greetings directory, run the go test command to execute the test.
 
 The go test command executes test functions (whose names begin with Test) in test files (whose names end with _test.go). You can add the -v flag to get verbose output that lists all of the tests and their results.
 
 	go test -v
-
 ## compilation
 The go build command compiles the packages, along with their dependencies, but it doesn't install the results.
 
@@ -53,19 +49,11 @@ As an alternative, if you already have a directory like $HOME/bin in your shell 
 
 	go env -w GOBIN=/path/to/your/bin
 or
+	
 	go env -w GOBIN=C:\path\to\your\bin
 Once you've updated the shell path, run the go install command to compile and install the package:
+	
 	go install
-
-## links
-
-	https://gobyexample.com/
-	https://go.dev/blog/declaration-syntax
-	https://go.dev/blog/slices-intro
-	https://go.dev/blog/defer-panic-and-recover
-	https://go.dev/doc/code
-	https://go.dev/doc/articles/wiki/
-	https://go.dev/doc/effective_go
 
 ## Basic types
 
@@ -571,6 +559,449 @@ and make it an error by giving it a
 method such that ErrNegativeSqrt(-2).Error() returns "cannot Sqrt negative number: -2".
 
 Note: A call to fmt.Sprint(e) inside the Error method will send the program into an infinite loop. You can avoid this by converting e first: fmt.Sprint(float64(e)). Why? Change your Sqrt function to return an ErrNegativeSqrt value when given a negative number.
+#### Solution
+``` Go
+type ErrNegativeSqrt float64
 
-TBC https://go.dev/tour/methods/20
+func (e ErrNegativeSqrt) Error() string {
+	return fmt.Sprintf("cannot Sqrt negative number: %v", float64(e))
+}
 
+func Sqrt(x float64) (z float64, e ErrNegativeSqrt) {
+	if x < 0 {
+		e = ErrNegativeSqrt(x)
+		return 
+	}
+	z = 1.
+	for y := x; ; {
+		z -= (z*z - x) / (2 * z)
+		if z == y || y-z <= 0.0000001 {
+			return
+		}
+		y = z
+	}
+}
+```
+
+## Readers
+The io package specifies the io.Reader interface, which represents the read end of a stream of data.
+
+The Go standard library contains many [implementations](https://cs.opensource.google/search?q=Read%5C(%5Cw%2B%5Cs%5C%5B%5C%5Dbyte%5C)&ss=go%2Fgo) of this interface, including files, network connections, compressors, ciphers, and others. The io.Reader interface has a Read method:
+
+	func (T) Read(b []byte) (n int, err error)
+Read populates the given byte slice with data and returns the number of bytes populated and an error value. It returns an io.EOF error when the stream ends. The example code creates a strings.Reader and consumes its output 8 bytes at a time.
+``` Go
+	r := strings.NewReader("Hello, Reader!")
+
+	b := make([]byte, 8)
+	for {
+		n, err := r.Read(b)
+		fmt.Printf("n = %v err = %v b = %v\n", n, err, b)
+		fmt.Printf("b[:n] = %q\n", b[:n])
+		if err == io.EOF {
+			break
+		}
+	}
+```
+### Exercise: https://go.dev/tour/methods/22
+Implement a Reader type that emits an infinite stream of the ASCII character 'A'.
+#### Solution
+https://stackoverflow.com/questions/27839140/tour-of-go-exercise-22-reader-what-does-the-question-mean
+``` Go
+type MyReader struct{}
+
+func (m MyReader) Read(b []byte) (n int, e error) {
+	if len(b) <= 0 {
+		return
+	}
+	b[0] = 'A'
+	return 1, nil
+}
+```
+### Exercise
+https://go.dev/tour/methods/23
+
+A common pattern is an io.Reader that wraps another io.Reader, modifying the stream in some way.
+
+For example, the gzip.NewReader function takes an io.Reader (a stream of compressed data) and returns a *gzip.Reader that also implements io.Reader (a stream of the decompressed data).
+
+Implement a rot13Reader that implements io.Reader and reads from an io.Reader, modifying the stream by applying the rot13 substitution cipher to all alphabetical characters. The rot13Reader type is provided for you. Make it an io.Reader by implementing its Read method.
+#### TODO
+``` Go
+var t map[byte]byte = table("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+	"NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm")
+
+func table(a string, b string) (m map[byte]byte) {
+	m = make(map[byte]byte)
+	for i, v := range a {
+		m[byte(v)] = b[i]
+	}
+	return
+}
+
+func (r rot13Reader) Read(b []byte) (n int, e error) {
+	if len(b) <= 0 {
+		return
+	}
+	b[0] = t[b[0]]
+	return 1, nil
+}
+```
+
+## Images
+Package image defines the Image interface:
+``` Go
+package image
+
+type Image interface {
+    ColorModel() color.Model
+    Bounds() Rectangle
+    At(x, y int) color.Color
+}
+// the Rectangle return value of the Bounds method is actually an image.Rectangle, as the declaration is inside package image.
+```
+The color.Color and color.Model types are also interfaces, but we'll ignore that by using the predefined implementations color.RGBA and color.RGBAModel. These interfaces and types are specified by the image/color package.
+### Exercise
+Return an implementation of image.Image. Define your own Image type, implement the [necessary methods](https://pkg.go.dev/image#Image), and call pic.ShowImage.
+
+Bounds should return a image.Rectangle, like image.Rect(0, 0, w, h).
+
+ColorModel should return color.RGBAModel.
+
+At should return a color; the value v in the last picture generator corresponds to color.RGBA{v, v, 255, 255} in this one.
+
+https://stackoverflow.com/questions/39979956/golang-exerciseimages-missing-at-method
+
+## Type parameters
+Go functions can be written to work on multiple types using type parameters. The type parameters of a function appear between brackets, before the function's arguments.
+
+	func Index[T comparable](s []T, x T) int
+This declaration means that s is a slice of any type T that fulfills the built-in constraint comparable. x is also a value of the same type.
+
+comparable is a useful constraint that makes it possible to use the == and != operators on values of the type.
+``` Go
+// Index returns the index of x in s, or -1 if not found.
+func Index[T comparable](s []T, x T) int {
+	for i, v := range s {
+		// v and x are type T, which has the comparable
+		// constraint, so we can use == here.
+		if v == x {
+			return i
+		}
+	}
+	return -1
+}
+```
+In addition to generic functions, Go also supports generic types. A type can be parameterized with a type parameter, which could be useful for implementing generic data structures.
+``` Go
+// List represents a singly-linked list that holds
+// values of any type.
+type List[T any] struct {
+	next *List[T]
+	val  T
+}
+```
+
+## Goroutines
+A goroutine is a lightweight thread managed by the Go runtime.
+
+	go f(x, y, z)
+starts a new goroutine running f(x, y, z)
+
+The evaluation of f, x, y, and z happens in the current goroutine and the execution of f happens in the new goroutine.
+``` Go
+func say(s string) {
+	for i := 0; i < 5; i++ {
+		time.Sleep(100 * time.Millisecond)
+		fmt.Println(s)
+	}
+}
+
+go say("world")
+```
+Goroutines run in the same address space, so access to shared memory must be synchronized. The sync package provides useful primitives, although you won't need them much in Go as there are other primitives.
+### Channels
+Channels are a typed conduit through which you can send and receive values with the channel operator, <-.
+``` Go
+ch <- v    // Send v to channel ch.
+v := <-ch  // Receive from ch, and
+           // assign value to v.
+```
+Like maps and slices, channels must be created before use:
+
+	ch := make(chan int)
+By default, sends and receives block until the other side is ready. This allows goroutines to synchronize without explicit locks or condition variables.
+``` Go
+func sum(s []int, c chan int) {
+	sum := 0
+	for _, v := range s {
+		sum += v
+	}
+	c <- sum // send sum to c
+}
+
+s := []int{7, 2, 8, -9, 4, 0}
+c := make(chan int)
+
+go sum(s[:len(s)/2], c)
+go sum(s[len(s)/2:], c)
+
+x, y := <-c, <-c // receive from c
+```
+The example code sums the numbers in a slice, distributing the work between two goroutines. Once both goroutines have completed their computation, it calculates the final result.
+
+Channels can be buffered. Provide the buffer length as the second argument to make to initialize a buffered channel:
+
+	ch := make(chan int, 100)
+Sends to a buffered channel block only when the buffer is full. Receives block when the buffer is empty.
+### Range and Close
+A sender can close a channel to indicate that no more values will be sent. Receivers can test whether a channel has been closed by assigning a second parameter to the receive expression: after
+
+	v, ok := <-ch
+ok is false if there are no more values to receive and the channel is closed. The loop for i := range c receives values from the channel repeatedly until it is closed.
+``` Go
+func fibonacci(n int, c chan int) {
+	x, y := 0, 1
+	for i := 0; i < n; i++ {
+		c <- x
+		x, y = y, x+y
+	}
+	close(c)
+}
+
+c := make(chan int, 10)
+go fibonacci(cap(c), c)
+```
+Only the sender should close a channel, never the receiver. Sending on a closed channel will cause a panic.
+
+Channels aren't like files; you don't usually need to close them. Closing is only necessary when the receiver must be told there are no more values coming, such as to terminate a range loop.
+### Select
+The select statement lets a goroutine wait on multiple communication operations. A select blocks until one of its cases can run, then it executes that case. It chooses one at random if multiple are ready.
+``` Go
+func fibonacci(c, quit chan int) {
+	x, y := 0, 1
+	for {
+		select {
+		case c <- x:
+			x, y = y, x+y
+		case <-quit:
+			fmt.Println("quit")
+			return
+		}
+	}
+}
+
+c := make(chan int)
+quit := make(chan int)
+go func() {
+	for i := 0; i < 10; i++ {
+		fmt.Println(<-c)
+	}
+	quit <- 0
+}()
+fibonacci(c, quit)
+```
+#### Default Selection
+The default case in a select is run if no other case is ready. Use a default case to try a send or receive without blocking:
+``` Go
+	start := time.Now()
+	tick := time.Tick(100 * time.Millisecond)
+	boom := time.After(500 * time.Millisecond)
+	elapsed := func() time.Duration {
+		return time.Since(start).Round(time.Millisecond)
+	}
+	for {
+		select {
+		case <-tick:
+			fmt.Printf("[%6s] tick.\n", elapsed())
+		case <-boom:
+			fmt.Printf("[%6s] BOOM!\n", elapsed())
+			return
+		default:
+			fmt.Printf("[%6s]     .\n", elapsed())
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+```
+### Exercise: https://go.dev/tour/concurrency/8
+This example uses the tree package, which defines the type:
+``` Go
+type Tree struct {
+    Left  *Tree
+    Value int
+    Right *Tree
+}
+```
+Use Go's concurrency and channels to write a simple solution: a function to check whether two binary trees store the same sequence.
+#### Solution: https://medium.com/@basakabhijoy/solving-the-equivalent-binary-trees-exercise-in-go-92254cacfb76
+``` Go
+// Walk walks the tree t sending all values
+// from the tree to the channel ch.
+func Walk(t *tree.Tree, ch chan int) {
+	if t == nil {
+		return
+	}
+	Walk(t.Left, ch)
+	ch <- t.Value
+	Walk(t.Right, ch)
+}
+
+func Walking(t *tree.Tree, ch chan int) {
+ 	Walk(t, ch)
+ 	defer close(ch)  // close channel after Walk() finishes
+}
+// Same determines whether the trees
+// t1 and t2 contain the same values.
+func Same(t1, t2 *tree.Tree) (b bool) {
+	ch1 := make(chan int)
+	ch2 := make(chan int)
+	go Walking(t1, ch1)
+	go Walking(t2, ch2)
+	
+	for {
+		v1, e1 := <- ch1   
+		v2, e2 := <- ch2
+		if e1 != e2 || v1 != v2 {
+			return false
+		}
+		if !e1 {
+			break;
+		}
+	}
+	return true
+}
+// fmt.Println(Same(tree.New(1), tree.New(1)))
+```
+### Mutex
+We've seen how channels are great for communication among goroutines. But what if we don't need communication? What if we just want to make sure only one goroutine can access a variable at a time to avoid conflicts? This concept is called mutual exclusion, and the conventional name for the data structure that provides it is mutex. Go's standard library provides mutual exclusion with sync.Mutex and its two methods:
+* Lock
+* Unlock
+We can define a block of code to be executed in mutual exclusion by surrounding it with a call to Lock and Unlock as shown on the Inc method. We can also use defer to ensure the mutex will be unlocked as in the Value method.
+``` Go
+// SafeCounter is safe to use concurrently.
+type SafeCounter struct {
+	mu sync.Mutex
+	v  map[string]int
+}
+
+// Inc increments the counter for the given key.
+func (c *SafeCounter) Inc(key string) {
+	c.mu.Lock()
+	// Lock so only one goroutine at a time can access the map c.v.
+	c.v[key]++
+	c.mu.Unlock()
+}
+
+// Value returns the current value of the counter for the given key.
+func (c *SafeCounter) Value(key string) int {
+	c.mu.Lock()
+	// Lock so only one goroutine at a time can access the map c.v.
+	defer c.mu.Unlock()
+	return c.v[key]
+}
+
+func main() {
+	c := SafeCounter{v: make(map[string]int)}
+	for i := 0; i < 1000; i++ {
+		go c.Inc("somekey")
+	}
+
+	time.Sleep(time.Second)
+	fmt.Println(c.Value("somekey"))
+}
+```
+### Exercise: https://go.dev/tour/concurrency/10
+Use Go's concurrency features to parallelize a web crawler. Modify the Crawl function to fetch URLs in parallel without fetching the same URL twice.
+``` Go
+type Fetcher interface {
+	// Fetch returns the body of URL and
+	// a slice of URLs found on that page.
+	Fetch(url string) (body string, urls []string, err error)
+}
+
+// Crawl uses fetcher to recursively crawl
+// pages starting with url, to a maximum of depth.
+func Crawl(url string, depth int, fetcher Fetcher) {
+	// TODO: Fetch URLs in parallel.
+	// TODO: Don't fetch the same URL twice.
+	// This implementation doesn't do either:
+	if depth <= 0 {
+		return
+	}
+	body, urls, err := fetcher.Fetch(url)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("found: %s %q\n", url, body)
+	for _, u := range urls {
+		Crawl(u, depth-1, fetcher)
+	}
+	return
+}
+```
+Hint: you can keep a cache of the URLs that have been fetched on a map, but maps alone are not safe for concurrent use!
+``` Go
+// fakeFetcher is Fetcher that returns canned results.
+type fakeFetcher map[string]*fakeResult
+
+type fakeResult struct {
+	body string
+	urls []string
+}
+
+func (f fakeFetcher) Fetch(url string) (string, []string, error) {
+	if res, ok := f[url]; ok {
+		return res.body, res.urls, nil
+	}
+	return "", nil, fmt.Errorf("not found: %s", url)
+}
+
+// fetcher is a populated fakeFetcher.
+var fetcher = fakeFetcher{
+	"https://golang.org/": &fakeResult{
+		"The Go Programming Language",
+		[]string{
+			"https://golang.org/pkg/",
+			"https://golang.org/cmd/",
+		},
+	},
+	"https://golang.org/pkg/": &fakeResult{
+		"Packages",
+		[]string{
+			"https://golang.org/",
+			"https://golang.org/cmd/",
+			"https://golang.org/pkg/fmt/",
+			"https://golang.org/pkg/os/",
+		},
+	},
+	"https://golang.org/pkg/fmt/": &fakeResult{
+		"Package fmt",
+		[]string{
+			"https://golang.org/",
+			"https://golang.org/pkg/",
+		},
+	},
+	"https://golang.org/pkg/os/": &fakeResult{
+		"Package os",
+		[]string{
+			"https://golang.org/",
+			"https://golang.org/pkg/",
+		},
+	},
+}
+```
+
+## Extra
+1. [How to Write Go Code](https://go.dev/doc/code)
+2. [The Go Programming Language Specification](https://go.dev/ref/spec)
+3. [Go Concurrency Patterns](https://www.youtube.com/watch?v=f6kdp27TYZs)
+4. [Advanced Go Concurrency Patterns](https://www.youtube.com/watch?v=QDDwwePbDtw)
+5. [Share Memory By Communicating](https://go.dev/doc/codewalk/sharemem/)
+6. [Go: a simple programming environment](https://vimeo.com/53221558)
+7. [Writing Web Applications](https://go.dev/doc/articles/wiki/)
+8. [First-Class Functions in Go](https://go.dev/doc/codewalk/functions/)
+9. [Effective Go](https://go.dev/doc/effective_go)
+10. [Go by Example](https://gobyexample.com/)
+11. [Defer, Panic, and Recover](https://go.dev/blog/defer-panic-and-recover)
+12. [Go Slices: usage and internals](https://go.dev/blog/slices-intro)
