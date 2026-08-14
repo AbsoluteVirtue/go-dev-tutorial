@@ -1,45 +1,53 @@
-package main
+// Source - https://stackoverflow.com/a/54213577
+// Posted by dirkjot
+// Retrieved 2026-08-13, License - CC BY-SA 4.0
 
-import (
-	"fmt"
-
-	"golang.org/x/tour/tree"
-)
-
-// type Tree struct {
-//    Left  *Tree
-//    Value int
-//    Right *Tree
-// }
-
-// Walk walks the tree t sending all values
-// from the tree to the channel ch.
-func Walk(t *tree.Tree, ch chan int) {
-	if t == nil {
-		return
-	}
-	Walk(t.Left, ch)
-	ch <- t.Value
-	Walk(t.Right, ch)
+// recursionController is a data structure with three channels to control our Crawl recursion.
+// Tried to use sync.waitGroup in a previous version, but I was unhappy with the mandatory sleep.
+// The idea is to have three channels, counting the outstanding calls (children), completed calls
+// (done) and results (results).  Once outstanding calls == completed calls we are done (if you are
+// sufficiently careful to signal any new children before closing your current one, as you may be the last one).
+//
+type recursionController struct {
+	results  chan string
+	children chan int
+	done     chan int
 }
 
-// Same determines whether the trees
-// t1 and t2 contain the same values.
-func Same(t1, t2 *tree.Tree) (b bool) {
-	ch1 := make(chan int)
-	ch2 := make(chan int)
-	go Walk(t1, ch1)
-	go Walk(t2, ch2)
+// instead of instantiating one instance, as we did above, use a more idiomatic Go solution
+func NewRecursionController() recursionController {
+	// we buffer results to 1000, so we cannot crawl more pages than that.
+	return recursionController{make(chan string, 1000), make(chan int), make(chan int)}
+}
 
-	for v1 := range ch1 {
-		v2 := <-ch2
-		if v1 != v2 {
-			return false
+// recursionController.Add: convenience function to add children to controller (similar to waitGroup)
+func (rc recursionController) Add(children int) {
+	rc.children <- children
+}
+
+// recursionController.Done: convenience function to remove a child from controller (similar to waitGroup)
+func (rc recursionController) Done() {
+	rc.done <- 1
+}
+
+// recursionController.Wait will wait until all children are done
+func (rc recursionController) Wait() {
+	fmt.Println("Controller waiting...")
+	var children, done int
+	for {
+		select {
+		case childrenDelta := <-rc.children:
+			children += childrenDelta
+			// fmt.Printf("children found %v total %v\n", childrenDelta, children)
+		case <-rc.done:
+			done += 1
+			// fmt.Println("done found", done)
+		default:
+			if done > 0 && children == done {
+				fmt.Printf("Controller exiting, done = %v, children =  %v\n", done, children)
+				close(rc.results)
+				return
+			}
 		}
 	}
-	return true
-}
-
-func main() {
-	fmt.Println(Same(tree.New(1), tree.New(1)))
 }
