@@ -939,41 +939,39 @@ var fetcher = fakeFetcher{
 #### Solution
 Also see, https://stackoverflow.com/questions/18207772/how-to-wait-for-all-goroutines-to-finish-without-using-time-sleep
 ``` Go
-func Crawl(url string, depth int, fetcher Fetcher, ret chan string) {
-    defer close(ret)
-    if depth <= 0 {
-        return
-    }
+func Crawl(url string, depth int, fetcher Fetcher, ch chan string) {
+	defer close(ch)
+	if depth <= 0 {
+		return
+	}
+	body, urls, err := fetcher.Fetch(url)
+	if err != nil {
+		ch <- err.Error()
+		return
+	}
+	ch <- fmt.Sprintf("found: %s %q\n", url, body)
+	
+	li := make([]chan string, len(urls))
+	for i, u := range urls {
+		li[i] := make(chan string)
+		go Crawl(u, depth-1, fetcher, li[i])
+	}
+	
+	for c := range li {
+		for m := range c {
+			ch <- m
+		}
+	}
 
-    body, urls, err := fetcher.Fetch(url)
-    if err != nil {
-        ret <- err.Error()
-        return
-    }
-
-    ret <- fmt.Sprintf("found: %s %q", url, body)
-
-    result := make([]chan string, len(urls))
-    for i, u := range urls {
-        result[i] = make(chan string)
-        go Crawl(u, depth-1, fetcher, result[i])
-    }
-
-    for i := range result {
-        for s := range result[i] {
-            ret <- s
-        }
-    }
-
-    return
+	return
 }
 
 func main() {
-    result := make(chan string)
-    go Crawl("http://golang.org/", 4, fetcher, result)
+	c := make(chan string)
 
-    for s := range result {
-        fmt.Println(s)
-    }
+	Crawl("https://golang.org/", 4, fetcher, c)
+	for s := range c {
+		fmt.Println(s)
+	}
 }
 ```
