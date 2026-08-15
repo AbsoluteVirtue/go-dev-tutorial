@@ -975,3 +975,79 @@ func main() {
 	}
 }
 ```
+#### Alt. solution
+``` Go
+// SafeMap is safe to use concurrently.
+type SafeMap struct {
+    v   map[string] bool
+    mux sync.Mutex
+}
+
+// SetVal sets the value for the given key.
+func (m *SafeMap) SetVal(key string, val bool) {
+    m.mux.Lock()
+    // Lock so only one goroutine at a time can access the map c.v.
+    m.v[key] = val
+    m.mux.Unlock()
+}
+
+// Value returns the current value of the counter for the given key.
+func (m *SafeMap) GetVal(key string) bool {
+    m.mux.Lock()
+    // Lock so only one goroutine at a time can access the map c.v.
+    defer m.mux.Unlock()
+    return m.v[key]
+}
+
+// Crawl uses fetcher to recursively crawl
+// pages starting with url, to a maximum of depth.
+func Crawl(url string, depth int, fetcher Fetcher, status chan bool, urlMap SafeMap) {
+
+    // Check if we fetched this url previously.
+    if ok := urlMap.GetVal(url); ok {
+        //fmt.Println("Already fetched url!")
+        status <- true
+        return 
+    }
+
+    // Marking this url as fetched already.
+    urlMap.SetVal(url, true)
+
+    if depth <= 0 {
+        status <- false
+        return
+    }
+
+    body, urls, err := fetcher.Fetch(url)
+    if err != nil {
+        fmt.Println(err)
+        status <- false
+        return
+    }
+
+    fmt.Printf("found: %s %q\n", url, body)
+
+    statuses := make ([]chan bool, len(urls)) 
+    for index, u := range urls {
+        statuses[index] = make (chan bool)
+        go Crawl(u, depth-1, fetcher, statuses[index], urlMap)
+    }
+
+    // Wait for child goroutines.
+    for _, childstatus := range(statuses) {
+        <- childstatus
+    }
+
+    // And now this goroutine can finish.
+    status <- true
+
+    return
+}
+
+func main() {
+    urlMap := SafeMap{v: make(map[string] bool)}
+    status := make(chan bool)
+    go Crawl("https://golang.org/", 4, fetcher, status, urlMap)
+    <- status
+}
+```
