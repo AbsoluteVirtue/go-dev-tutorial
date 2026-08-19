@@ -64,26 +64,28 @@ A number can be given a type by using it in a context that requires one, such as
 ## For
 `for` is Go’s only looping construct. Here are some basic types of `for` loops.
 ``` Go
+// The most basic type, with a single condition.
     i := 1
     for i <= 3 {
         fmt.Println(i)
         i = i + 1
     }
-
+// A classic initial/condition/after `for` loop.
     for j := 0; j < 3; j++ {
         fmt.Println(j)
     }
-
+// `range` over an integer.
     for i := range 3 {
         fmt.Println("range", i)
     }
-
+// `for` without a condition will loop repeatedly.
     for {
         fmt.Println("loop")
         break
     }
 
     for n := range 6 {
+// You can also `continue` to the next iteration of the loop.
         if n%2 == 0 {
             continue
         }
@@ -93,8 +95,7 @@ A number can be given a type by using it in a context that requires one, such as
 - The most basic type, with a single condition. 
 - A classic initial/condition/after `for` loop.
 - Another way of accomplishing the basic “do this N times” iteration is `range` over an integer.
-
-`for` without a condition will loop repeatedly until you break out of the loop or return from the enclosing function. You can also `continue` to the next iteration of the loop.
+- `for` without a condition will loop repeatedly until you break out of the loop or return from the enclosing function. You can also `continue` to the next iteration of the loop.
 ## If/Else
 Branching with `if` and `else` in Go is straight-forward. Here’s a basic example.
 ``` Go
@@ -111,7 +112,7 @@ Branching with `if` and `else` in Go is straight-forward. Here’s a basic examp
     if 8%2 == 0 || 7%2 == 0 {
         fmt.Println("either 8 or 7 are even")
     }
-
+// A statement can precede conditionals.
     if num := 9; num < 0 {
         fmt.Println(num, "is negative")
     } else if num < 10 {
@@ -147,9 +148,9 @@ Switch statements express conditionals across many branches.
         fmt.Println("It's a weekday")
     }
 // switch without an expression is an alternate way to express if/else logic. 
-// Here we also show how the case expressions can be non-constants.
     t := time.Now()
     switch {
+// Here we also show how the case expressions can be non-constants.
     case t.Hour() < 12:
         fmt.Println("It's before noon")
     default:
@@ -343,21 +344,19 @@ func plus(a int, b int) int {
 // Go requires explicit returns, i.e. it won’t automatically return the value of the last expression.
     return a + b
 }
-
+// You may omit the type name for the like-typed parameters up to the final parameter that declares the type.
 func plusPlus(a, b, c int) int {
     return a + b + c
 }
-
-func main() {
-
+```
+Go requires explicit returns, i.e. it won’t automatically return the value of the last expression. When you have multiple consecutive parameters of the same type, you may omit the type name for the like-typed parameters up to the final parameter that declares the type. Call a function just as you’d expect, with `name(args)`.
+``` Go
     res := plus(1, 2)
     fmt.Println("1+2 =", res)
 
     res = plusPlus(1, 2, 3)
     fmt.Println("1+2+3 =", res)
-}
 ```
-Go requires explicit returns, i.e. it won’t automatically return the value of the last expression. When you have multiple consecutive parameters of the same type, you may omit the type name for the like-typed parameters up to the final parameter that declares the type. Call a function just as you’d expect, with `name(args)`.
 ### Multiple Return Values
 Go has built-in support for multiple return values. This feature is used often in idiomatic Go, for example to return both result and error values from a function.
 ``` Go
@@ -515,6 +514,9 @@ func zeroptr(iptr *int) {
     zeroptr(p)
     fmt.Println("value at *p:", *p)
 ```
+- The &i syntax gives the memory address of i, i.e. a pointer to i.
+- A new pointer to a value can be created with the builtin function new.
+
 `zeroval` doesn’t change the `i` in main, but `zeroptr` does because it has a reference to the memory address for that variable.
 ## Strings and Runes
 A Go string is a read-only slice of bytes. The language and the standard library treat strings specially - as containers of text encoded in UTF-8. In other languages, strings are made of “characters”. In Go, the concept of a character is called a `rune` - it’s an integer that represents a Unicode code point. This [Go blog post](https://go.dev/blog/strings) is a good introduction to the topic.
@@ -934,6 +936,8 @@ Iteration doesn’t require an underlying data structure, and doesn’t even hav
     }
 
 ```
+- Since List.All returns an iterator, we can use it in a regular range loop.
+
 Packages like slices have a number of useful functions to work with iterators. For example, `Collect` takes any `iterator` and collects all its values into a slice.
 
 Standard library packages now expose `iterator` helpers too. For example, `strings.SplitSeq` iterates over parts of a `byte` slice without first building a result slice.
@@ -1147,7 +1151,7 @@ For our example we’ll select across two channels. Each channel will receive a 
         c2 <- "two"
     }()
 ```
-We’ll use ё to await both of these values simultaneously, printing each one as it arrives.
+We’ll use `select` to await both of these values simultaneously, printing each one as it arrives.
 ``` Go
     for range 2 {
         select {
