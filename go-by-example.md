@@ -2664,3 +2664,559 @@ $ go run embed-directive.go
 ```
 
 ## Testing and Benchmarking
+Unit testing is an important part of writing principled Go programs. The `testing` package provides the tools we need to write unit tests and the `go test` command runs tests. For the sake of demonstration, this code is in package `main`, but it could be any package. *Testing code typically lives in the same package as the code it tests*.
+
+We’ll be testing this simple implementation of an integer minimum. Typically, the code we’re testing would be in a source file named something like `intutils.go`, and the test file for it would then be named `intutils_test.go`.
+``` Go
+func IntMin(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
+}
+// A test is created by writing a function with a name beginning with Test.	
+func TestIntMinBasic(t *testing.T) {
+    ans := IntMin(2, -2)
+    if ans != -2 {
+// continue executing the test
+        t.Errorf("IntMin(2, -2) = %d; want -2", ans)
+    }
+}
+```
+`t.Error*` will report test failures but *continue executing the test*. `t.Fatal*` will report test failures and *stop the test immediately*.
+
+Writing tests can be repetitive, so it’s idiomatic to use a *table-driven style*, where test inputs and expected outputs are listed in a table and a single loop walks over them and performs the test logic.
+``` Go
+func TestIntMinTableDriven(t *testing.T) {
+    var tests = []struct {
+        a, b int
+        want int
+    }{
+        {0, 1, 0},
+        {1, 0, 0},
+        {2, -2, -2},
+        {0, -1, -1},
+        {-1, 0, -1},
+    }
+    for _, tt := range tests {
+        testname := fmt.Sprintf("%d,%d", tt.a, tt.b)
+// running “subtests”, one for each table entry
+        t.Run(testname, func(t *testing.T) {
+            ans := IntMin(tt.a, tt.b)
+            if ans != tt.want {
+                t.Errorf("got %d, want %d", ans, tt.want)
+            }
+        })
+    }
+}
+```
+`t.Run` enables running “subtests”, one for each table entry. These are shown separately when executing `go test -v`.
+
+Benchmark tests typically go in `_test.go` files and are named beginning with `Benchmark`. Any code that’s required for the benchmark to run but should not be measured goes before this loop.
+``` Go
+func BenchmarkIntMin(b *testing.B) {
+    for b.Loop() {
+// automatically execute this loop body many times
+        IntMin(1, 2)
+    }
+}
+```
+The benchmark runner will automatically execute this loop body many times to determine a reasonable estimate of the run-time of a single iteration.
+
+Run all benchmarks in the current project. All tests are run prior to benchmarks. The bench flag filters benchmark function names with a regexp.
+``` bash
+$ go test -bench=.
+goos: darwin
+goarch: arm64
+pkg: examples/testing
+BenchmarkIntMin-8 1000000000 0.3136 ns/op
+PASS
+ok      examples/testing-and-benchmarking    0.351s
+```
+
+## Command-Line Arguments
+Command-line arguments are a common way to parameterize execution of programs. For example, `go run hello.go` uses `run` and `hello.go` arguments to the go program. `os.Args` provides access to raw command-line arguments. Note that the first value in this slice is the path to the program, and `os.Args[1:]` holds the arguments to the program.
+``` Go
+func main() {
+    argsWithProg := os.Args
+    argsWithoutProg := os.Args[1:]
+// You can get individual args with normal indexing.
+    arg := os.Args[3]
+    fmt.Println(argsWithProg)
+    fmt.Println(argsWithoutProg)
+    fmt.Println(arg)
+}
+```
+To experiment with command-line arguments it’s best to build a binary with go build first.
+``` bash
+$ go build command-line-arguments.go
+$ ./command-line-arguments a b c d
+[./command-line-arguments a b c d]       
+[a b c d]
+c
+```
+### Command-Line Flags
+Command-line flags are a common way to specify options for command-line programs. For example, in `wc -l` the `-l` is a command-line flag. Go provides a `flag` package supporting basic command-line flag parsing. We’ll use this package to implement our example command-line program.
+
+Basic flag declarations are available for `string`, `integer`, and `boolean` options. Here we declare a `string` flag word with a default value `"foo"` and a short description. This `flag.String` function returns a `string` pointer (not a `string` value); we’ll see how to use this pointer below.
+``` Go
+    wordPtr := flag.String("word", "foo", "a string")
+    numbPtr := flag.Int("numb", 42, "an int")
+    forkPtr := flag.Bool("fork", false, "a bool")
+```
+It’s also possible to declare an option that uses an existing var declared elsewhere in the program. Note that we need to pass in a pointer to the flag declaration function.
+``` Go
+    var svar string
+    flag.StringVar(&svar, "svar", "bar", "a string var")
+// Once all flags are declared, call flag.Parse() to execute the command-line parsing.
+    flag.Parse()
+
+    fmt.Println("word:", *wordPtr)
+    fmt.Println("numb:", *numbPtr)
+    fmt.Println("fork:", *forkPtr)
+    fmt.Println("svar:", svar)
+    fmt.Println("tail:", flag.Args())
+```
+Here we’ll just dump out the parsed options and any trailing positional arguments. Note that we need to dereference the pointers with e.g. `*wordPtr` to get the actual option values.
+
+To experiment with the command-line flags program it’s best to first compile it and then run the resulting binary directly. Try out the built program by first giving it values for all flags.
+``` bash
+$ go build command-line-flags.go
+$ ./command-line-flags -word=opt -numb=7 -fork -svar=flag
+word: opt
+numb: 7
+fork: true
+svar: flag
+tail: []
+```
+- Note that if you omit flags they automatically take their default values.
+- Trailing positional arguments can be provided after any flags.
+- Note that the `flag` package requires all flags to appear before positional arguments (otherwise the flags will be interpreted as positional arguments).
+- Use `-h` or `--help` flags to get automatically generated help text for the command-line program.
+- If you provide a flag that wasn’t specified to the `flag` package, the program will print an `error` message and show the help text again.
+### Command-Line Subcommands
+Some command-line tools, like the go tool or git have many subcommands, each with its own set of flags. For example, `go build` and `go get` are two different subcommands of the *go* tool. The `flag` package lets us easily define simple subcommands that have their own flags.
+
+We declare a subcommand using the `NewFlagSet` function, and proceed to define new flags specific for this subcommand.
+``` Go
+    fooCmd := flag.NewFlagSet("foo", flag.ExitOnError)
+    fooEnable := fooCmd.Bool("enable", false, "enable")
+    fooName := fooCmd.String("name", "", "name")
+// For a different subcommand we can define different supported flags.
+    barCmd := flag.NewFlagSet("bar", flag.ExitOnError)
+    barLevel := barCmd.Int("level", 0, "level")
+// The subcommand is expected as the first argument to the program.
+    if len(os.Args) < 2 {
+        fmt.Println("expected 'foo' or 'bar' subcommands")
+        os.Exit(1)
+    }
+// Check which subcommand is invoked.
+    switch os.Args[1] {
+// For every subcommand, we parse its own flags and have access to trailing positional arguments.
+    case "foo":
+        fooCmd.Parse(os.Args[2:])
+        fmt.Println("subcommand 'foo'")
+        fmt.Println("  enable:", *fooEnable)
+        fmt.Println("  name:", *fooName)
+        fmt.Println("  tail:", fooCmd.Args())
+    case "bar":
+        barCmd.Parse(os.Args[2:])
+        fmt.Println("subcommand 'bar'")
+        fmt.Println("  level:", *barLevel)
+        fmt.Println("  tail:", barCmd.Args())
+    default:
+        fmt.Println("expected 'foo' or 'bar' subcommands")
+        os.Exit(1)
+    }
+```
+Next we’ll look at environment variables, another common way to parameterize programs.
+``` bash
+$ go build command-line-subcommands.go
+$ ./command-line-subcommands foo -enable -name=joe a1 a2
+subcommand 'foo'
+  enable: true
+  name: joe
+  tail: [a1 a2]
+```
+### Environment Variables
+Environment variables are a universal mechanism for conveying [configuration information to Unix programs](https://www.12factor.net/config). Let’s look at how to set, get, and list environment variables.
+
+To set a key/value pair, use `os.Setenv`. To get a value for a key, use `os.Getenv`. This will return an empty `string` if the key isn’t present in the environment.
+``` Go
+    os.Setenv("FOO", "1")
+    fmt.Println("FOO:", os.Getenv("FOO"))
+    fmt.Println("BAR:", os.Getenv("BAR"))
+```
+Use `os.Environ` to list all key/value pairs in the environment. This returns a slice of strings in the form `KEY=value`. You can `strings.SplitN` them to get the key and value. Here we print all the keys.
+``` Go
+    fmt.Println()
+    for _, e := range os.Environ() {
+        pair := strings.SplitN(e, "=", 2)
+        fmt.Println(pair[0])
+    }
+```
+Running the program shows that we pick up the value for `FOO` that we set in the program, but that `BAR` is empty.
+``` Go
+$ go run environment-variables.go
+FOO: 1
+BAR: 
+TERM_PROGRAM
+PATH
+SHELL
+...
+FOO
+```
+
+## Logging
+The Go standard library provides straightforward tools for outputting logs from Go programs, with the `log` package for free-form output and the `log/slog` package for structured output.
+
+Simply invoking functions like `Println` from the `log` package uses the standard logger, which is already pre-configured for reasonable logging output to `os.Stderr`. Additional methods like `Fatal*` or `Panic*` will exit the program after logging.
+``` Go
+    log.Println("standard logger")
+    log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+    log.Println("with micro")
+```
+Loggers can be configured with *flags* to set their output format. By default, the standard logger has the `log.Ldate` and `log.Ltime` flags set, and these are collected in `log.LstdFlags`. We can change its flags to emit time with microsecond accuracy, for example.
+``` Go
+    log.SetFlags(log.LstdFlags | log.Lshortfile)
+// It also supports emitting the file name and line from which the log function is called.
+    log.Println("with file/line")
+```
+It may be useful to create a custom logger and pass it around. When creating a new logger, we can set a *prefix* to distinguish its output from other loggers.
+``` Go
+    mylog := log.New(os.Stdout, "my:", log.LstdFlags)
+    mylog.Println("from mylog")
+// We can set the prefix on existing loggers (including the standard one) with the SetPrefix method.
+    mylog.SetPrefix("ohmy:")
+    mylog.Println("from mylog")
+```
+Loggers can have custom output targets; any `io.Writer` works.
+``` Go
+    var buf bytes.Buffer
+    buflog := log.New(&buf, "buf:", log.LstdFlags)
+// This call writes the log output into buf.
+    buflog.Println("hello")
+// This will actually show it on standard output.
+    fmt.Print("from buflog:", buf.String())
+```
+The `slog` package provides structured log output. For example, logging in JSON format is straightforward.
+``` Go
+    jsonHandler := slog.NewJSONHandler(os.Stderr, nil)
+    myslog := slog.New(jsonHandler)
+    myslog.Info("hi there")
+// In addition to the message, slog output can contain an arbitrary number of key=value pairs.
+    myslog.Info("hello again", "key", "val", "age", 25)
+```
+Sample output; the date and time emitted will depend on when the example ran.
+``` bash
+$ go run logging.go
+2023/08/22 10:45:16 standard logger
+2023/08/22 10:45:16.904141 with micro
+2023/08/22 10:45:16 logging.go:40: with file/line
+my:2023/08/22 10:45:16 from mylog
+ohmy:2023/08/22 10:45:16 from mylog
+from buflog:buf:2023/08/22 10:45:16 hello
+{"time":"2023-08-22T10:45:16.904166391-07:00",
+ "level":"INFO","msg":"hi there"}
+{"time":"2023-08-22T10:45:16.904178985-07:00",
+    "level":"INFO","msg":"hello again",
+    "key":"val","age":25}
+```
+These are wrapped for clarity of presentation on the website; in reality they are emitted on a single line.
+
+## HTTP Client
+The Go standard library comes with excellent support for HTTP clients and servers in the `net/http` package. In this example we’ll use it to issue simple HTTP requests.
+
+Issue an HTTP `GET` request to a server. `http.Get` is a convenient shortcut around creating an `http.Client` object and calling its `Get` method; it uses the `http.DefaultClient` object which has useful default settings.
+``` Go
+    resp, err := http.Get("https://gobyexample.com")
+    if err != nil {
+        panic(err)
+    }
+    defer resp.Body.Close()
+// Print the HTTP response status.
+    fmt.Println("Response status:", resp.Status)
+// Print the first 5 lines of the response body.
+    scanner := bufio.NewScanner(resp.Body)
+    for i := 0; scanner.Scan() && i < 5; i++ {
+        fmt.Println(scanner.Text())
+    }
+    if err := scanner.Err(); err != nil {
+        panic(err)
+    }
+```
+### HTTP Server
+Writing a basic HTTP server is easy using the `net/http` package. A fundamental concept in `net/http` servers is *handlers*. A handler is an object implementing the `http.Handler` interface. A common way to write a handler is by using the `http.HandlerFunc` *adapter* on functions with the appropriate signature.
+``` Go
+func hello(w http.ResponseWriter, req *http.Request) {
+    fmt.Fprintf(w, "hello\n")
+}
+```
+Functions serving as handlers take a `http.ResponseWriter` and a `http.Request` as arguments. The response writer is used to fill in the HTTP response. Here our simple response is just `“hello\n”`.
+``` Go
+func headers(w http.ResponseWriter, req *http.Request) {
+    for name, headers := range req.Header {
+        for _, h := range headers {
+            fmt.Fprintf(w, "%v: %v\n", name, h)
+        }
+    }
+}
+```
+This handler does something a little more sophisticated by reading all the HTTP request headers and echoing them into the response body.
+
+We register our handlers on server routes using the `http.HandleFunc` convenience function. It sets up the default *router* in the `net/http` package and takes a function as an argument.
+``` Go
+    http.HandleFunc("/hello", hello)
+    http.HandleFunc("/headers", headers)
+
+    http.ListenAndServe(":8090", nil)
+```
+Finally, we call the `ListenAndServe` with the port and a handler. `nil` tells it to use the default router we’ve just set up.
+
+Run the server in the background.
+``` bash
+$ go run http-server.go &
+	
+$ curl localhost:8090/hello
+hello
+```
+### TCP Server
+The `net` package provides the tools we need to easily build TCP *socket* servers. `net.Listen` starts the server on the given network (TCP) and address (port 8090 on all interfaces). Close the listener to free the port when the application exits.
+``` Go
+    listener, err := net.Listen("tcp", ":8090")
+    if err != nil {
+        log.Fatal("Error listening:", err)
+    }
+    defer listener.Close()
+```
+Loop indefinitely to accept new client connections.
+``` Go
+    for {
+// Wait for a connection.
+        conn, err := listener.Accept()
+        if err != nil {
+            log.Println("Error accepting conn:", err)
+            continue
+        }
+// We use a goroutine here to handle the connection so that the main loop can continue accepting more connections.
+        go handleConnection(conn)
+    }
+```
+We use a goroutine here to handle the connection so that the main loop can continue accepting more connections.
+
+`handleConnection` handles a single client connection, reading one line of text from the client and returning a response.
+``` Go
+func handleConnection(conn net.Conn) {
+    defer conn.Close()
+// read one line of data from the client (terminated by a newline).
+    reader := bufio.NewReader(conn)
+    message, err := reader.ReadString('\n')
+    if err != nil {
+        log.Printf("Read error: %v", err)
+        return
+    }
+// Create and send a response back to the client
+    ackMsg := strings.ToUpper(strings.TrimSpace(message))
+    response := fmt.Sprintf("ACK: %s\n", ackMsg)
+    _, err = conn.Write([]byte(response))
+    if err != nil {
+        log.Printf("Server write error: %v", err)
+    }
+```
+- Closing the connection releases resources when we are finished interacting with the client.
+- Use `bufio.NewReader` to read one line of data from the client (terminated by a newline).
+- Create and send a response back to the client, demonstrating two-way communication. Send data and capture the response using netcat.
+``` bash
+$ go run tcp-server.go &
+
+$ echo "Hello from netcat" | nc localhost 8090
+ACK: HELLO FROM NETCAT
+```
+### Context
+In the previous example we looked at setting up a simple HTTP server. HTTP servers are useful for demonstrating the usage of context.Context for controlling cancellation. A Context carries deadlines, cancellation signals, and other request-scoped values across API boundaries and goroutines.
+
+A `context.Context` is created for each request by the `net/http` machinery, and is available with the `Context()` method.
+``` Go
+func hello(w http.ResponseWriter, req *http.Request) {
+    ctx := req.Context()
+    fmt.Println("server: hello handler started")
+    defer fmt.Println("server: hello handler ended")
+```
+Wait for a few seconds before sending a reply to the client. This could simulate some work the server is doing. While working, keep an eye on the context’s `Done()` channel for a signal that we should cancel the work and return as soon as possible.
+``` Go
+    select {
+    case <-time.After(10 * time.Second):
+        fmt.Fprintf(w, "hello\n")
+    case <-ctx.Done():
+// The context’s Err() method returns an error that explains why the Done() channel was closed.
+        err := ctx.Err()
+        fmt.Println("server:", err)
+        internalError := http.StatusInternalServerError
+        http.Error(w, err.Error(), internalError)
+    }
+}
+```
+- The context’s Err() method returns an error that explains why the Done() channel was closed.
+- As before, we register our handler on the “/hello” route, and start serving.
+``` Go
+    http.HandleFunc("/hello", hello)
+    http.ListenAndServe(":8090", nil)
+```
+Simulate a client request to /hello, hitting Ctrl+C shortly after starting to signal cancellation.
+``` bash
+$ go run context.go &
+
+$ curl localhost:8090/hello
+server: hello handler started
+^C
+server: context canceled
+server: hello handler ended
+```
+
+## Spawning Processes
+Sometimes our Go programs need to spawn other processes. We’ll start with a simple command that takes no arguments or input and just prints something to `stdout`. The `exec.Command` helper creates an object to represent this external process.
+``` Go
+    dateCmd := exec.Command("date")
+    dateOut, err := dateCmd.Output()
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println("> date")
+    fmt.Println(string(dateOut))
+```
+The `Output` method runs the command, waits for it to finish and collects its standard output. If there were no `error`s, `dateOut` will hold bytes with the date info.
+
+`Output` and other methods of `Command` will return `*exec.Error` if there was a problem executing the command (e.g. wrong path), and `*exec.ExitError` if the command ran but exited with a non-zero return code.
+``` Go
+    _, err = exec.Command("date", "-x").Output()
+    if err != nil {
+        if e, ok := errors.AsType[*exec.Error](err); ok {
+            fmt.Println("failed executing:", e)
+        } else if e, ok := errors.AsType[*exec.ExitError](err); ok {
+            exitCode := e.ExitCode()
+            fmt.Println("command exit rc =", exitCode)
+        } else {
+            panic(err)
+        }
+    }
+```
+Next we’ll look at a slightly more involved case where we pipe data to the external process on its `stdin` and collect the results from its `stdout`.
+``` Go
+    grepCmd := exec.Command("grep", "hello")
+    grepIn, _ := grepCmd.StdinPipe()
+    grepOut, _ := grepCmd.StdoutPipe()
+    grepCmd.Start()
+    grepIn.Write([]byte("hello grep\ngoodbye grep"))
+    grepIn.Close()
+    grepBytes, _ := io.ReadAll(grepOut)
+    grepCmd.Wait()
+```
+Here we explicitly grab input/output pipes, start the process, write some input to it, read the resulting output, and finally wait for the process to exit.
+
+We omitted error checks in the above example, but you could use the usual `if err != nil` pattern for all of them. We also only collect the `StdoutPipe` results, but you could collect the `StderrPipe` in exactly the same way.
+``` Go
+    fmt.Println("> grep hello")
+    fmt.Println(string(grepBytes))
+
+    lsCmd := exec.Command("bash", "-c", "ls -a -l -h")
+    lsOut, err := lsCmd.Output()
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println("> ls -a -l -h")
+    fmt.Println(string(lsOut))
+```
+Note that when spawning commands we need to provide an explicitly delineated command and argument array, vs. being able to just pass in one command-line `string`. If you want to spawn a full command with a `string`, you can use bash’s `-c` option.
+
+The spawned programs return output that is the same as if we had run them directly from the command-line. `date` doesn’t have a `-x` flag so it will exit with an error message and non-zero return code.
+``` bash
+$ go run spawning-processes.go 
+> date
+Thu 05 May 2022 10:10:12 PM PDT
+	
+command exit rc = 1
+> grep hello
+hello grep
+> ls -a -l -h
+drwxr-xr-x  4 mark 136B Oct 3 16:29 .
+drwxr-xr-x 91 mark 3.0K Oct 3 12:50 ..
+-rw-r--r--  1 mark 1.3K Oct 3 16:28 spawning-processes.go
+```
+### Exec'ing Processes
+In the previous example we looked at spawning external processes. We do this when we need an external process accessible to a running Go process. Sometimes we just want to completely replace the current Go process with another (perhaps non-Go) one. To do this we’ll use Go’s implementation of the classic `exec` function.
+
+For our example we’ll exec `ls`. Go requires an absolute path to the binary we want to execute, so we’ll use `exec.LookPath` to find it (probably `/bin/ls`).
+``` Go
+    binary, lookErr := exec.LookPath("ls")
+    if lookErr != nil {
+        panic(lookErr)
+    }
+// give ls a few common arguments.
+    args := []string{"ls", "-a", "-l", "-h"}
+// provide our current environment.
+    env := os.Environ()
+```
+Exec requires arguments in slice form (as opposed to one big string). We’ll give ls a few common arguments. Note that the first argument should be the program name. Exec also needs a set of environment variables to use. Here we just provide our current environment.
+
+Here’s the actual syscall.Exec call. If this call is successful, the execution of our process will end here and be replaced by the /bin/ls -a -l -h process. If there is an error we’ll get a return value.
+``` Go
+    execErr := syscall.Exec(binary, args, env)
+    if execErr != nil {
+        panic(execErr)
+    }
+```
+When we run our program it is replaced by `ls`. Note that Go does not offer a classic Unix `fork` function. Usually this isn’t an issue though, since starting goroutines, spawning processes, and `exec`’ing processes covers most use cases for `fork`.
+``` bash
+$ go run execing-processes.go
+total 16
+drwxr-xr-x  4 mark 136B Oct 3 16:29 .
+drwxr-xr-x 91 mark 3.0K Oct 3 12:50 ..
+-rw-r--r--  1 mark 1.3K Oct 3 16:28 execing-processes.go
+```
+
+## Signals
+Sometimes we’d like our Go programs to intelligently handle Unix signals. For example, we might want a server to gracefully shutdown when it receives a `SIGTERM`, or a command-line tool to stop processing input if it receives a `SIGINT`. Here’s a modern way to handle signals using contexts.
+
+`signal.NotifyContext` returns a `context` that’s canceled when one of the listed signals arrives. The program will wait here until one of the configured signals is received.
+``` Go
+    ctx, stop := signal.NotifyContext(
+        context.Background(), syscall.SIGINT, syscall.SIGTERM)
+    defer stop()
+    fmt.Println("awaiting signal")
+    <-ctx.Done()
+
+    fmt.Println()
+    fmt.Println(context.Cause(ctx))
+    fmt.Println("exiting")
+```
+`context.Cause` reports why the context was canceled. For a signal-triggered cancellation, this includes the `signal` value.
+
+When we run this program it will block waiting for a `signal`. By typing `ctrl-C` (which the terminal shows as `^C`) we can send a `SIGINT` signal, causing the program to print the cancellation cause and then exit.
+``` bash
+$ go run signals.go
+awaiting signal
+^C
+interrupt signal received
+exiting
+```
+### Exit
+Use `os.Exit` to immediately exit with a given status. `defer`s will not be run when using `os.Exit`, so this `fmt.Println` will never be called.
+``` Go
+func main() {
+    defer fmt.Println("!")
+// Exit with status 3.
+    os.Exit(3)
+}
+```
+Note that unlike e.g. C, *Go does not use an integer return value* from `main` to indicate exit status. If you’d like to exit with a non-zero status you should use `os.Exit`.
+
+If you run `exit.go` using `go run`, the exit will be picked up by go and printed. By building and executing a binary you can see the status in the terminal. Note that the ! from our program never got printed.
+``` bash
+$ go run exit.go
+exit status 3
+
+$ go build exit.go
+$ ./exit
+$ echo $?
+3
+```
