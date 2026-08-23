@@ -31,6 +31,27 @@ Publish the example.com/greetings module from its repository (with a module path
 To do that, use the go mod edit command to edit the example.com/hello module to redirect Go tools from its module path (where the module isn't) to the local directory (where it is):
 
 	go mod edit -replace example.com/greetings=../greetings
+## running in vscode
+1. Install the [go extension](https://github.com/golang/vscode-go/)
+2. Install the [Delve debugger](https://github.com/go-delve/delve)
+3. Initialize the `mod` file, 
+
+    go mod init [modname]
+a. also see https://stackoverflow.com/a/67307008:
+> Although not required, it's generally advisable to `init` when you're inside of a Git (or other VCS) repository so that modules can lean on your `remote`s information to determine the name of the module correctly, for example:
+``` bash
+git init
+git remote add origin https://github.com/syntaqx/dacode
+go mod init
+```
+> Alternatively, and I often do this for sake of not needing to do things in any particular order, you can specify the module name:
+
+    go mod init github.com/syntaqx/dacode # is generally better, because it describes my remote
+> By specifying it, modules can just initialize in whatever directory I'm in without having to magic anything from the code. While you're starting out especially, I highly recommend naming your modules the same naming structure you would use for a repository. By doing so, you're allowing commands like:
+
+    go get github.com/syntaqx/dacode
+> To function correctly without having to do any of the internals yourself. As you learn more about how they work, you can decide if you want to keep that convention or go against the grain, but it's likely more sane to be consistent.
+
 ## tests
 At the command line in the greetings directory, run the go test command to execute the test.
 
