@@ -105,16 +105,8 @@ func sayhello(count int, wg *sync.WaitGroup, messages *chan string) {
 	*messages <- fmt.Sprintf("hello: %d", count)
 }
 ```
-> You have to close the channel to notify the for loops to finish.--https://go.dev/play/p/nU2Rq6PJdO
+or
 ``` Go
-package main
-
-import (
-	"fmt"
-	"strconv"
-	"sync"
-)
-
 var wg sync.WaitGroup
 
 func main() {
@@ -141,5 +133,32 @@ func sayhello(message chan string) {
 			return
 		}
 	}
+}
+```
+> You have to close the channel to notify the for loops to finish.--https://go.dev/play/p/nU2Rq6PJdO
+``` Go
+func main() {
+	wg := new(sync.WaitGroup)
+	messages := make(chan string)
+	for x := 1; x <= 5; x++ {
+		wg.Add(1)
+		go func(count int) {
+			defer wg.Done()
+			sayhello(messages, count)
+		}(x)
+	}
+	go func() {
+		wg.Wait()
+		close(messages)
+	}()
+
+	for msg := range messages {
+		fmt.Println(msg)
+	}
+}
+
+func sayhello(messages chan<- string, count int) {
+	time.Sleep(time.Millisecond * time.Duration(1000))
+	messages <- fmt.Sprintf("hello: %d", count)
 }
 ```
