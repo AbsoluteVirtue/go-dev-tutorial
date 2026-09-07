@@ -24,7 +24,6 @@ func main() {
 
 	check_urls(urls[:10])
 	// time.Sleep(time.Second * 60)
-
 }
 
 func check_urls(urls []string) {
